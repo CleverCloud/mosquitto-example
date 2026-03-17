@@ -1,0 +1,58 @@
+[tasks.build]
+description = "Download and install Mosquitto"
+run = """
+
+# ------------
+
+echo "Building libmicrohttpd"
+
+cd ${APP_HOME}
+curl -sL https://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-${LIBMICROHTTPD_VERSION}.tar.gz -o libmicrohttpd.tar.gz
+tar xf libmicrohttpd.tar.gz
+cd ${APP_HOME}/libmicrohttpd-${LIBMICROHTTPD_VERSION}
+./configure --prefix=${APP_HOME}/local --disable-shared --disable-https
+make
+make install
+
+# ------------
+
+echo "Building cJSON"
+
+cd ${APP_HOME}
+curl -sL https://mosquitto.org/files/source/mosquitto-${MOSQUITTO_VERSION}.tar.gz -o mosquitto.tar.gz
+curl -sL https://github.com/DaveGamble/cJSON/archive/refs/tags/v${CJSON_VERSION}.tar.gz -o cjson.tar.gz
+
+tar xf cjson.tar.gz
+tar xf mosquitto.tar.gz
+
+cd ${APP_HOME}/cJSON-${CJSON_VERSION}
+make
+
+# ------------
+
+echo "Building Mosquitto"
+
+cd ${APP_HOME}/mosquitto-${MOSQUITTO_VERSION}
+mkdir include/cjson
+ln -s ${APP_HOME}/cJSON-${CJSON_VERSION}/cJSON.h include/cjson/cJSON.h
+CFLAGS="-I${APP_HOME}/local/include" LDFLAGS="-L${APP_HOME}/cJSON-${CJSON_VERSION} -L${APP_HOME}/local/lib" make WITH_WEBSOCKETS=no
+
+# ------------
+
+echo "Setting Mosquitto password"
+
+cd ${APP_HOME}
+export LD_LIBRARY_PATH=${APP_HOME}/local/lib:${APP_HOME}/cJSON-${CJSON_VERSION}:${LD_LIBRARY_PATH}
+touch passwdfile
+chmod 600 passwdfile
+${APP_HOME}/mosquitto-${MOSQUITTO_VERSION}/apps/mosquitto_passwd/mosquitto_passwd -b passwdfile ${MQTT_USER} ${MQTT_PASSWORD}
+
+
+"""
+
+[tasks.run]
+description = "Start Mosquitto server"
+run = """
+export LD_LIBRARY_PATH=${APP_HOME}/local/lib:${APP_HOME}/cJSON-${CJSON_VERSION}:${LD_LIBRARY_PATH}
+mosquitto-${MOSQUITTO_VERSION}/src/mosquitto -c config/mosquitto.conf
+"""
